@@ -19,6 +19,7 @@ PubSubClientTools mqtt(client);
 ThreadController threadControl = ThreadController();
 Thread thread = Thread();
 Thread relayThread = Thread();
+Thread buttonThread = Thread();
 Thread dhtThread = Thread();
 
 const byte PIN_CLK = 22;   // define CLK pin (any digital pin)
@@ -26,6 +27,7 @@ const byte PIN_DIO = 23;   // define DIO pin (any digital pin)
 SevenSegmentTM1637    display(PIN_CLK, PIN_DIO);
 
 boolean relayState = false;
+byte buttonState = 0xff;
 
 int value = 0;
 const String s = "";
@@ -40,6 +42,7 @@ ComfortState cf;
 int dhtPin = 15;
 
 const byte PIN_RELAY = 13; //220V relay control pin
+const byte PIN_BUTTON = 4; //Control button input
 
 /**
  * initTemp
@@ -129,6 +132,7 @@ String getTemperature() {
 
 void setup() {
   pinMode(PIN_RELAY, OUTPUT);
+  pinMode(PIN_BUTTON, INPUT);
   
   Serial.begin(115200);
   Serial.println();
@@ -168,6 +172,10 @@ void setup() {
   relayThread.setInterval(1000);
   threadControl.add(&relayThread);
 
+  buttonThread.onRun(buttonControl);
+  buttonThread.setInterval(50);
+  threadControl.add(&buttonThread);
+
   initTemp();
 }
 
@@ -176,14 +184,24 @@ void loop() {
   threadControl.run();
 }
 
+void buttonControl() {
+  buttonState <<= 1;
+  
+  if (digitalRead(PIN_BUTTON)) {
+    buttonState |= 1;
+  } else {
+    buttonState &= 0xfe;
+  }
+
+  if ((buttonState & 0x0f) == 0x0c) {
+    relayState ^= 1;
+  }
+}
+
 void relayControl() {
   if (relayState == true) {
-    relayState = false;
-
     digitalWrite(PIN_RELAY, HIGH);
   } else {
-    relayState = true;
-
     digitalWrite(PIN_RELAY, LOW);    
   }
 }
