@@ -189,8 +189,6 @@ void buttonControl() {
   
   if (digitalRead(PIN_BUTTON)) {
     buttonState |= 1;
-  } else {
-    buttonState &= 0xfe;
   }
 
   if ((buttonState & 0x0f) == 0x0c) {
