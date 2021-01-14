@@ -7,10 +7,7 @@
 #include "SevenSegmentTM1637.h"
 
 #include "DHTesp.h"
-
-#define WIFI_SSID "TP-Link_2E34"
-#define WIFI_PASS "63004052"
-#define MQTT_SERVER "192.168.0.105"
+#include "settings.h"
 
 WiFiClient espClient;
 PubSubClient client(MQTT_SERVER, 1883, espClient);
