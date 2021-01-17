@@ -119,7 +119,11 @@ String getTemperature() {
       break;
   };
 
-  String retval = " T:" + String(newValues.temperature) + " H:" + String(newValues.humidity) + " I:" + String(heatIndex) + " D:" + String(dewPoint) + " " + comfortStatus;
+  String retval = "{\"temperature\":" + String(newValues.temperature) + 
+                  ", \"humidity\":" + String(newValues.humidity) + 
+                  ", \"heatIndex\":" + String(heatIndex) + 
+                  ", \"dewPoint\":" + String(dewPoint) + 
+                  ", \"comfortStatus\":\"" + comfortStatus + "\"}";
 
   display.print(String(newValues.temperature, 1));
 
@@ -203,12 +207,12 @@ void relayControl() {
 
 void publisher() {
   ++value;
-  mqtt.publish("test_out/hello_world", s+"Hello World! - No. "+value);
+  mqtt.publish("dehum_out/heartbit", s + "{\"counter\":\"" + value + "\"}");
 }
 
 void dhtPublisher() {
   String dhtReadings = getTemperature();
-  mqtt.publish("test_out/dht", dhtReadings);
+  mqtt.publish("dehum_out/measures", dhtReadings);
 }
 
 void topic1_subscriber(String topic, String message) {
