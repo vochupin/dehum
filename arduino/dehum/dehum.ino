@@ -4,7 +4,9 @@
 
 #include <Thread.h>             // https://github.com/ivanseidel/ArduinoThread
 #include <ThreadController.h>
+#include <ArduinoJson.h>
 #include "SevenSegmentTM1637.h"
+
 
 #include "DHTesp.h"
 #include "settings.h"
@@ -40,6 +42,8 @@ int dhtPin = 15;
 
 const byte PIN_RELAY = 13; //220V relay control pin
 const byte PIN_BUTTON = 4; //Control button input
+
+StaticJsonDocument<256> doc;
 
 /**
  * initTemp
@@ -119,16 +123,21 @@ String getTemperature() {
       break;
   };
 
-  String retval = "{\"temperature\":" + String(newValues.temperature) + 
-                  ", \"humidity\":" + String(newValues.humidity) + 
-                  ", \"heatIndex\":" + String(heatIndex) + 
-                  ", \"dewPoint\":" + String(dewPoint) + 
-                  ", \"comfortStatus\":\"" + comfortStatus + "\"}";
+  doc.clear();
+
+  doc["temperature"] = newValues.temperature;
+  doc["humidity"] = newValues.humidity;
+  doc["heatIndex"] = heatIndex;
+  doc["dewPoint"] = dewPoint;
+  doc["comfortStatus"] = comfortStatus;
+
+  String output;
+  serializeJson(doc, output);
 
   display.print(String(newValues.temperature, 1));
 
-  Serial.println(retval);
-  return retval;
+  Serial.println(output);
+  return output;
 }
 
 void setup() {
@@ -152,9 +161,7 @@ void setup() {
   if (client.connect("ESP32Client")) {
     Serial.println("connected");
 
-    mqtt.subscribe("test_in/foo/bar",  topic1_subscriber);
-//    mqtt.subscribe("test_in/+/bar",    topic2_subscriber);
-//    mqtt.subscribe("test_in/#",        topic3_subscriber);
+    mqtt.subscribe("dehum_in/control",  topic_subscriber);
   } else {
     Serial.println(s+"failed, rc="+client.state());
   }
@@ -215,13 +222,17 @@ void dhtPublisher() {
   mqtt.publish("dehum_out/measures", dhtReadings);
 }
 
-void topic1_subscriber(String topic, String message) {
-  Serial.println(s+"Message arrived in function 1 ["+topic+"] "+message);
-  display.print(message);
-}
-void topic2_subscriber(String topic, String message) {
-  Serial.println(s+"Message arrived in function 2 ["+topic+"] "+message);
-}
-void topic3_subscriber(String topic, String message) {
-  Serial.println(s+"Message arrived in function 3 ["+topic+"] "+message);
+void topic_subscriber(String topic, String message) {
+  Serial.println(s+"Message arrived in handler ["+topic+"] "+message);
+
+  auto error = deserializeJson(doc, message);
+  if (error) {
+    Serial.print(F("deserializeJson() failed with code "));
+    Serial.println(error.c_str());
+    return;
+  }
+
+  String h = doc["hello"];
+
+  Serial.println(s+"Hello = " + h);
 }
