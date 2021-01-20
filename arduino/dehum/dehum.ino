@@ -45,6 +45,11 @@ const byte PIN_BUTTON = 4; //Control button input
 
 StaticJsonDocument<256> doc;
 
+const String CMD_ENABLE = String("enable");
+const String CMD_DISABLE = String("disable");
+
+const char* KEY_FAN = "fan";
+
 /**
  * initTemp
  * Setup DHT library
@@ -232,7 +237,13 @@ void topic_subscriber(String topic, String message) {
     return;
   }
 
-  String h = doc["hello"];
-
-  Serial.println(s+"Hello = " + h);
+  if (doc.containsKey(KEY_FAN)) {
+    String fanStr = doc[KEY_FAN];
+  
+    if (CMD_ENABLE.equalsIgnoreCase(fanStr)) {
+      relayState = true;
+    } else if (CMD_DISABLE.equalsIgnoreCase(fanStr)) {
+      relayState = false;
+    }
+  }
 }
