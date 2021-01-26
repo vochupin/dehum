@@ -351,5 +351,15 @@ void topic_subscriber(String topic, String message) {
     EEPROM.commit();  
 
     Serial.println("Write hysteresis to EEPROM: " + String(hysteresis));
+  } else if (doc.containsKey(KEY_FAN_MODE)) {
+    String modeStr = doc[KEY_FAN_MODE];
+  
+    mode = modeStr.toInt();
+
+    EEPROM.write(EE_MODE, mode);
+  
+    EEPROM.commit();  
+
+    Serial.println("Write hysteresis to EEPROM: " + String(hysteresis));
   }
 }
