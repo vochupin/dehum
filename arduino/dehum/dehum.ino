@@ -149,6 +149,14 @@ String getTemperature() {
       break;
   };
 
+  if (mode == MODE_AUTO) {
+    if (newValues.humidity > setpoint) {
+      relayState = true;
+    } else if (newValues.humidity < (setpoint - hysteresis)) {
+      relayState = false;
+    }
+  }
+
   doc.clear();
 
   doc["temperature"] = newValues.temperature;
@@ -156,6 +164,7 @@ String getTemperature() {
   doc["heatIndex"] = heatIndex;
   doc["dewPoint"] = dewPoint;
   doc["comfortStatus"] = comfortStatus;
+  doc["relay"] = relayState;
 
   String output;
   serializeJson(doc, output);
@@ -163,6 +172,7 @@ String getTemperature() {
   display.print(String(newValues.temperature, 1));
 
   Serial.println(output);
+  
   return output;
 }
 
