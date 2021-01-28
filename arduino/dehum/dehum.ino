@@ -25,6 +25,7 @@ PubSubClientTools mqtt(client);
 
 ThreadController threadControl = ThreadController();
 Thread thread = Thread();
+Thread indicatorThread = Thread();
 Thread relayThread = Thread();
 Thread buttonThread = Thread();
 Thread dhtThread = Thread();
@@ -66,10 +67,20 @@ const char* KEY_FAN_MODE = "mode";
 float setpoint;
 float hysteresis;
 
+boolean showMeasurements = false;
+
+float temperature = 0;
+float humidity = 0;
+
 #define MODE_AUTO 0
 #define MODE_REMOTE 1
 
 byte mode;
+
+#define IND_TEMPERATURE 0
+#define IND_HUMIDITY    1
+
+byte indicatorState;
 
 /**
  * initTemp
@@ -157,6 +168,10 @@ String getTemperature() {
     }
   }
 
+  temperature = newValues.temperature;
+  humidity = newValues.humidity;
+  showMeasurements = true;
+
   doc.clear();
 
   doc["temperature"] = newValues.temperature;
@@ -168,8 +183,6 @@ String getTemperature() {
 
   String output;
   serializeJson(doc, output);
-
-  display.print(String(newValues.temperature, 1));
 
   Serial.println(output);
   
@@ -277,6 +290,10 @@ void setup() {
   thread.setInterval(2000);
   threadControl.add(&thread);
 
+  indicatorThread.onRun(indicatorControl);
+  indicatorThread.setInterval(3000);
+  threadControl.add(&indicatorThread);
+
   relayThread.onRun(relayControl);
   relayThread.setInterval(1000);
   threadControl.add(&relayThread);
@@ -302,6 +319,27 @@ void buttonControl() {
 
   if ((buttonState & 0x0f) == 0x0c) {
     relayState ^= 1;
+  }
+}
+
+void indicatorControl() {
+  switch(indicatorState) {
+    case IND_TEMPERATURE:
+      indicatorState = IND_HUMIDITY;
+      if (showMeasurements) {
+        display.print("t " + String(temperature, 0));
+      } else {
+        display.print("t --");
+      }
+      break;
+    case IND_HUMIDITY:
+      indicatorState = IND_TEMPERATURE;
+      if (showMeasurements) {
+        display.print("H " + String(humidity, 0));
+      } else {
+        display.print("H --");
+      }
+      break;
   }
 }
 
