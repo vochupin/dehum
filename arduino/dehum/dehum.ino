@@ -24,7 +24,8 @@ PubSubClient client(MQTT_SERVER, 1883, espClient);
 PubSubClientTools mqtt(client);
 
 ThreadController threadControl = ThreadController();
-Thread thread = Thread();
+Thread wifiThread = Thread();
+Thread publisherThread = Thread();
 Thread indicatorThread = Thread();
 Thread relayThread = Thread();
 Thread buttonThread = Thread();
@@ -79,8 +80,11 @@ byte mode;
 
 #define IND_TEMPERATURE 0
 #define IND_HUMIDITY    1
+#define IND_WIFI        2
 
 byte indicatorState;
+
+int wifiConnectionCounter = 1;
 
 /**
  * initTemp
@@ -249,6 +253,41 @@ void readVariablesFromEeprom() {
   Serial.println("Mode: " + String(mode));
 }
 
+void connectToMqttIfNecessary() {
+  if (!client.connected()) {
+    Serial.print(s+"Connecting to MQTT: "+MQTT_SERVER+" ... ");
+    if (client.connect("ESP32Client")) {
+      Serial.println("connected");
+  
+      mqtt.subscribe("dehum_in/control",  topic_subscriber);
+    } else {
+      Serial.println(s+"failed, rc="+client.state());
+    }
+  }
+}
+
+void initThreads() {
+  wifiThread.onRun(wifiControl);
+  wifiThread.setInterval(10000);
+  threadControl.add(&wifiThread);
+
+  publisherThread.onRun(publisher);
+  publisherThread.setInterval(2000);
+  threadControl.add(&publisherThread);
+
+  indicatorThread.onRun(indicatorControl);
+  indicatorThread.setInterval(3000);
+  threadControl.add(&indicatorThread);
+
+  relayThread.onRun(relayControl);
+  relayThread.setInterval(1000);
+  threadControl.add(&relayThread);
+
+  buttonThread.onRun(buttonControl);
+  buttonThread.setInterval(50);
+  threadControl.add(&buttonThread);
+}
+
 void setup() {
   pinMode(PIN_RELAY, OUTPUT);
   pinMode(PIN_BUTTON, INPUT);
@@ -273,41 +312,36 @@ void setup() {
   }
   Serial.println("connected");
 
-  // Connect to MQTT
-  Serial.print(s+"Connecting to MQTT: "+MQTT_SERVER+" ... ");
-  if (client.connect("ESP32Client")) {
-    Serial.println("connected");
-
-    mqtt.subscribe("dehum_in/control",  topic_subscriber);
-  } else {
-    Serial.println(s+"failed, rc="+client.state());
-  }
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(true);
+  delay(500);
   
   display.print("conn");      // display INIT on the display
   
-  // Enable Threads
-  thread.onRun(publisher);
-  thread.setInterval(2000);
-  threadControl.add(&thread);
-
-  indicatorThread.onRun(indicatorControl);
-  indicatorThread.setInterval(3000);
-  threadControl.add(&indicatorThread);
-
-  relayThread.onRun(relayControl);
-  relayThread.setInterval(1000);
-  threadControl.add(&relayThread);
-
-  buttonThread.onRun(buttonControl);
-  buttonThread.setInterval(50);
-  threadControl.add(&buttonThread);
-
   initTemp();
+
+  initThreads();
 }
 
 void loop() {
   client.loop();
   threadControl.run();
+}
+
+void wifiControl() {
+  if(WiFi.status() == WL_CONNECTED){
+    Serial.println("Wifi connected!");
+
+    connectToMqttIfNecessary();
+  } else {
+    Serial.println("Wifi disconnected. Try to reconnect!");
+    WiFi.reconnect();
+
+    wifiConnectionCounter++;
+    if (wifiConnectionCounter > 999) {
+      wifiConnectionCounter = 0;
+    }
+  }
 }
 
 void buttonControl() {
@@ -333,11 +367,23 @@ void indicatorControl() {
       }
       break;
     case IND_HUMIDITY:
-      indicatorState = IND_TEMPERATURE;
+      indicatorState = IND_WIFI;
       if (showMeasurements) {
         display.print("H " + String(humidity, 0));
       } else {
         display.print("H --");
+      }
+      break;
+    case IND_WIFI:
+      indicatorState = IND_TEMPERATURE;
+      
+      char cntStr[10] = "____";      
+      if (WiFi.status() == WL_CONNECTED) {
+        sprintf(cntStr, "C%03d", wifiConnectionCounter);
+        display.print(cntStr);
+      } else {
+        sprintf(cntStr, "c%03d", wifiConnectionCounter);
+        display.print(cntStr);
       }
       break;
   }
