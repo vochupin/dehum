@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <PubSubClientTools.h>
@@ -18,6 +19,8 @@
 #define EE_SETPOINT 0
 #define EE_HYSTERESIS 4
 #define EE_MODE 8
+
+void dhtPublisher();
 
 WiFiClient espClient;
 PubSubClient client(MQTT_SERVER, 1883, espClient);
@@ -44,6 +47,12 @@ const String s = "";
 DHTesp dht;
 
 String getTemperature();
+void topic_subscriber(String topic, String message);
+void wifiControl();
+void publisher();
+void indicatorControl();
+void relayControl();
+void buttonControl();
 
 /** Comfort profile */
 ComfortState cf;
