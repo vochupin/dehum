@@ -1,30 +1,9 @@
-#include <Arduino.h>
-#include <WiFi.h>
-#include <PubSubClient.h>
-#include <PubSubClientTools.h>
+#define MAIN_H
 
-#include <Thread.h>             // https://github.com/ivanseidel/ArduinoThread
-#include <ThreadController.h>
-#include <ArduinoJson.h>
-#include <EEPROM.h>
-#include "SevenSegmentTM1637.h"
-
-
-#include "DHTesp.h"
+#include "main.h"
 #include "settings.h"
-
-#define EEPROM_SIZE 9 
-
-//EEPROM Map
-#define EE_SETPOINT 0
-#define EE_HYSTERESIS 4
-#define EE_MODE 8
-
-void dhtPublisher();
-
-WiFiClient espClient;
-PubSubClient client(MQTT_SERVER, 1883, espClient);
-PubSubClientTools mqtt(client);
+#include "network.h"
+#include "hardware.h"
 
 ThreadController threadControl = ThreadController();
 Thread wifiThread = Thread();
@@ -38,13 +17,6 @@ const byte PIN_CLK = 22;   // define CLK pin (any digital pin)
 const byte PIN_DIO = 23;   // define DIO pin (any digital pin)
 SevenSegmentTM1637    display(PIN_CLK, PIN_DIO);
 
-boolean relayState = false;
-byte buttonState = 0xff;
-
-int value = 0;
-const String s = "";
-
-DHTesp dht;
 
 String getTemperature();
 void topic_subscriber(String topic, String message);
@@ -62,154 +34,16 @@ int dhtPin = 15;
 const byte PIN_RELAY = 13; //220V relay control pin
 const byte PIN_BUTTON = 4; //Control button input
 
-StaticJsonDocument<256> doc;
-
-const String CMD_ENABLE = String("enable");
-const String CMD_DISABLE = String("disable");
-const String CMD_MODE_REMOTE = String("remote");
-const String CMD_MODE_AUTO = String("auto");
-
-const char* KEY_FAN = "fan";
-const char* KEY_FAN_SETPOINT = "setpoint";
-const char* KEY_FAN_HYSTERESIS = "hysteresis";
-const char* KEY_FAN_MODE = "mode";
-
-float setpoint;
-float hysteresis;
-
 boolean showMeasurements = false;
 
 float temperature = 0;
 float humidity = 0;
-
-#define MODE_AUTO 0
-#define MODE_REMOTE 1
-
-byte mode;
 
 #define IND_TEMPERATURE 0
 #define IND_HUMIDITY    1
 #define IND_WIFI        2
 
 byte indicatorState;
-
-int wifiConnectionCounter = 1;
-
-/**
- * initTemp
- * Setup DHT library
- * Setup task and timer for repeated measurement
- * @return bool
- *    true if task and timer are started
- *    false if task or timer couldn't be started
- */
-bool initTemp() {
-  byte resultValue = 0;
-  // Initialize temperature sensor
-  dht.setup(dhtPin, DHTesp::DHT11);
-  Serial.println("DHT initiated");
-
-  // Enable Thread
-  dhtThread.onRun(dhtPublisher);
-  dhtThread.setInterval(20000);
-  threadControl.add(&dhtThread);
-  
-  return true;
-}
-
-/**
- * getTemperature
- * Reads temperature from DHT11 sensor
- * @return bool
- *    true if temperature could be aquired
- *    false if aquisition failed
-*/
-String getTemperature() {
-  // Reading temperature for humidity takes about 250 milliseconds!
-  // Sensor readings may also be up to 2 seconds 'old' (it's a very slow sensor)
-  TempAndHumidity newValues = dht.getTempAndHumidity();
-  // Check if any reads failed and exit early (to try again).
-  if (dht.getStatus() != 0) {
-    String dhtError = "DHT11 error status: " + String(dht.getStatusString());
-    Serial.println(dhtError);
-    return dhtError;
-  }
-
-  float heatIndex = dht.computeHeatIndex(newValues.temperature, newValues.humidity);
-  float dewPoint = dht.computeDewPoint(newValues.temperature, newValues.humidity);
-  float cr = dht.getComfortRatio(cf, newValues.temperature, newValues.humidity);
-
-  String comfortStatus;
-  switch(cf) {
-    case Comfort_OK:
-      comfortStatus = "Comfort_OK";
-      break;
-    case Comfort_TooHot:
-      comfortStatus = "Comfort_TooHot";
-      break;
-    case Comfort_TooCold:
-      comfortStatus = "Comfort_TooCold";
-      break;
-    case Comfort_TooDry:
-      comfortStatus = "Comfort_TooDry";
-      break;
-    case Comfort_TooHumid:
-      comfortStatus = "Comfort_TooHumid";
-      break;
-    case Comfort_HotAndHumid:
-      comfortStatus = "Comfort_HotAndHumid";
-      break;
-    case Comfort_HotAndDry:
-      comfortStatus = "Comfort_HotAndDry";
-      break;
-    case Comfort_ColdAndHumid:
-      comfortStatus = "Comfort_ColdAndHumid";
-      break;
-    case Comfort_ColdAndDry:
-      comfortStatus = "Comfort_ColdAndDry";
-      break;
-    default:
-      comfortStatus = "Unknown:";
-      break;
-  };
-
-  if (mode == MODE_AUTO) {
-    if (newValues.humidity > setpoint) {
-      relayState = true;
-    } else if (newValues.humidity < (setpoint - hysteresis)) {
-      relayState = false;
-    }
-  }
-
-  temperature = newValues.temperature;
-  humidity = newValues.humidity;
-  showMeasurements = true;
-
-  doc.clear();
-
-  doc["temperature"] = newValues.temperature;
-  doc["humidity"] = newValues.humidity;
-  doc["heatIndex"] = heatIndex;
-  doc["dewPoint"] = dewPoint;
-  doc["comfortStatus"] = comfortStatus;
-  doc["relay"] = relayState;
-
-  String output;
-  serializeJson(doc, output);
-
-  Serial.println(output);
-  
-  return output;
-}
-
-void writeFloatToEeprom(word eepromAdr, float data) {
-  byte* b = (byte*) &data;
-  EEPROM.write(eepromAdr, b[0]);
-  EEPROM.write(eepromAdr + 1, b[1]);
-  EEPROM.write(eepromAdr + 2, b[2]);
-  EEPROM.write(eepromAdr + 3, b[3]);
-  
-}
 
 void initVariables() {
   setpoint = 50.0;
@@ -260,19 +94,6 @@ void readVariablesFromEeprom() {
   Serial.println("Setpoint: " + String(setpoint));
   Serial.println("Hysteresis: " + String(hysteresis));
   Serial.println("Mode: " + String(mode));
-}
-
-void connectToMqttIfNecessary() {
-  if (!client.connected()) {
-    Serial.print(s+"Connecting to MQTT: "+MQTT_SERVER+" ... ");
-    if (client.connect("ESP32Client")) {
-      Serial.println("connected");
-  
-      mqtt.subscribe("dehum_in/control",  topic_subscriber);
-    } else {
-      Serial.println(s+"failed, rc="+client.state());
-    }
-  }
 }
 
 void initThreads() {
@@ -337,22 +158,6 @@ void loop() {
   threadControl.run();
 }
 
-void wifiControl() {
-  if(WiFi.status() == WL_CONNECTED){
-    Serial.println("Wifi connected!");
-
-    connectToMqttIfNecessary();
-  } else {
-    Serial.println("Wifi disconnected. Try to reconnect!");
-    WiFi.reconnect();
-
-    wifiConnectionCounter++;
-    if (wifiConnectionCounter > 999) {
-      wifiConnectionCounter = 0;
-    }
-  }
-}
-
 void buttonControl() {
   buttonState <<= 1;
   
@@ -414,55 +219,4 @@ void publisher() {
 void dhtPublisher() {
   String dhtReadings = getTemperature();
   mqtt.publish("dehum_out/measures", dhtReadings);
-}
-
-void topic_subscriber(String topic, String message) {
-  Serial.println(s+"Message arrived in handler ["+topic+"] "+message);
-
-  auto error = deserializeJson(doc, message);
-  if (error) {
-    Serial.print(F("deserializeJson() failed with code "));
-    Serial.println(error.c_str());
-    return;
-  }
-
-  if (doc.containsKey(KEY_FAN)) {
-    String fanStr = doc[KEY_FAN];
-  
-    if (CMD_ENABLE.equalsIgnoreCase(fanStr)) {
-      relayState = true;
-    } else if (CMD_DISABLE.equalsIgnoreCase(fanStr)) {
-      relayState = false;
-    }
-  } else if (doc.containsKey(KEY_FAN_SETPOINT)) {
-    String setpointStr = doc[KEY_FAN_SETPOINT];
-  
-    setpoint = setpointStr.toFloat();
-
-    writeFloatToEeprom(EE_SETPOINT, setpoint);
-  
-    EEPROM.commit();  
-
-    Serial.println("Write setpoint to EEPROM: " + String(setpoint));
-  } else if (doc.containsKey(KEY_FAN_HYSTERESIS)) {
-    String hysteresisStr = doc[KEY_FAN_HYSTERESIS];
-  
-    hysteresis = hysteresisStr.toFloat();
-
-    writeFloatToEeprom(EE_HYSTERESIS, hysteresis);
-  
-    EEPROM.commit();  
-
-    Serial.println("Write hysteresis to EEPROM: " + String(hysteresis));
-  } else if (doc.containsKey(KEY_FAN_MODE)) {
-    String modeStr = doc[KEY_FAN_MODE];
-  
-    mode = modeStr.toInt();
-
-    EEPROM.write(EE_MODE, mode);
-  
-    EEPROM.commit();  
-
-    Serial.println("Write hysteresis to EEPROM: " + String(hysteresis));
-  }
 }
